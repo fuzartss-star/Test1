@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Opinie — FuZArts</title>
+  <meta name="color-scheme" content="dark">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="/fuzarts.png">
+</head>
+<body>
+  
+    <header>
+      <div class="container nav">
+        <a class="brand" href="index.html">FuZArts</a>
+        <nav>
+          <a href="index.html">Informacje</a>
+          <a href="grafika.html">Grafika</a>
+          <a href="montaz.html">Montaż</a>
+          <a href="opinie.html">Opinie</a>
+          <a href="kontakt.html">Kontakt</a>
+        </nav>
+      </div>
+    </header>
+    
+  
+  <section class="section">
+    <div class="container">
+      <div class="kicker">Zaufali mi</div>
+      <h1 class="h1 reveal">Wasze opinie</h1>
+      <div id="avgRating" class="quote reveal" style="margin-top:12px"><p>Średnia ocen: ...</p></div>
+
+      <div class="grid" style="grid-template-columns:350px 1fr;align-items:start;gap:24px;margin-top:16px">
+        <div class="card reveal">
+          <div class="body">
+            <h3>Dodaj opinię</h3>
+            <div class="stars" id="starContainer" style="display:flex;gap:6px;margin:10px 0;cursor:pointer">
+              <span class="star" data-value="1" style="font-size:24px;color:#ccc">★</span>
+              <span class="star" data-value="2" style="font-size:24px;color:#ccc">★</span>
+              <span class="star" data-value="3" style="font-size:24px;color:#ccc">★</span>
+              <span class="star" data-value="4" style="font-size:24px;color:#ccc">★</span>
+              <span class="star" data-value="5" style="font-size:24px;color:#ccc">★</span>
+            </div>
+            <form onsubmit="dodajOpinie();return false;">
+              <input id="nick" class="input" placeholder="Nick / Imię" required />
+              <input id="email" class="input" type="email" placeholder="E-mail (nie będzie publiczny)" required />
+              <textarea id="opinia" class="input" placeholder="Twoja opinia" rows="4"></textarea>
+              <button class="btn primary" type="submit">Wyślij</button>
+            </form>
+            <p class="p" style="font-size:12px;color:#a1a1aa;margin-top:8px">E-mail służy wyłącznie do weryfikacji i nie jest nigdzie publikowany.</p>
+          </div>
+        </div>
+        <div class="card reveal">
+          <div class="body">
+            <h3>Opinie użytkowników</h3>
+            <div id="listaOpinie" class="testimonials" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCi_WnrSttdoS6sWtYrl8Ceb3gPlpTe3Ow",
+      authDomain: "fuzarts.firebaseapp.com",
+      projectId: "fuzarts",
+      storageBucket: "fuzarts.firebasestorage.app",
+      messagingSenderId: "553380411909",
+      appId: "1:553380411909:web:ef64b1df537424cdb0fa6c"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let selectedRating = 0;
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.star').forEach(star => {
+        star.addEventListener('click', function() {
+          selectedRating = Number(this.getAttribute('data-value'));
+          document.querySelectorAll('.star').forEach(s => s.style.color='#ccc');
+          for (let i=0;i<selectedRating;i++){ document.querySelectorAll('.star')[i].style.color='gold'; }
+        });
+      });
+      ladujOpinie();
+    });
+
+    async function sha256(text){
+      const enc=new TextEncoder().encode(text);
+      const buf=await crypto.subtle.digest('SHA-256',enc);
+      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    function validEmail(e){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);}
+
+    async function dodajOpinie(){
+      const opinia = document.getElementById('opinia').value.trim();
+      const name = (document.getElementById('nick').value||"").trim();
+      const email = (document.getElementById('email').value||"").trim();
+      if(!name){alert("Podaj nick/imię.");return;}
+      if(!validEmail(email)){alert("Podaj poprawny e-mail.");return;}
+      if (selectedRating===0 || opinia===""){ alert("Proszę wybrać ocenę i wpisać opinię"); return; }
+      const email_hash = await sha256(email.toLowerCase());
+      db.collection("opinie").add({
+        name,
+        email_hash,
+        rating: selectedRating,
+        tekst: opinia,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        status: "published"
+      }).then(()=>{
+        document.getElementById('opinia').value='';
+        document.getElementById('nick').value='';
+        document.getElementById('email').value='';
+        selectedRating=0;
+        document.querySelectorAll('.star').forEach(s=>s.style.color='#ccc');
+        ladujOpinie();
+      }).catch(err=>alert("Błąd przy dodawaniu opinii: "+err));
+    }
+
+    function ladujOpinie(){
+      const lista=document.getElementById('listaOpinie'); lista.innerHTML='';
+      db.collection("opinie").orderBy("timestamp","desc").get().then(q=>{
+        let sum=0,count=0;
+        q.forEach(doc=>{
+          const d=doc.data();
+          if(typeof d.rating==='number'){sum+=d.rating;count++;}
+          let dataText=""; if(d.timestamp && d.timestamp.toDate){
+            const t=d.timestamp.toDate();
+            dataText=t.toLocaleDateString("pl-PL",{year:"numeric",month:"long",day:"numeric",hour:"2-digit",minute:"2-digit"});
+          }
+          const item=document.createElement('div');
+          item.className='quote';
+          const author=(d.name||'Anonim');
+          item.innerHTML=`<p><strong>${'★'.repeat(d.rating)}${'☆'.repeat(5-d.rating)}</strong></p><div class='who'><span class='author'>${author}</span>${dataText? ' • Dodano: '+dataText : ''}</div><p style='margin-top:8px'>${d.tekst}</p>`;
+          lista.appendChild(item);
+        });
+        const avgEl=document.getElementById('avgRating');
+        if(count>0){
+          const avg=(sum/count).toFixed(1);
+          const stars = '★'.repeat(Math.round(avg)) + '☆'.repeat(5-Math.round(avg));
+          avgEl.innerHTML = `<p><strong>${stars}</strong> Średnia ocen: ${avg} / 5 • Liczba opinii: ${count}</p>`;
+        } else {
+          avgEl.innerHTML = `<p>Brak opinii — bądź pierwszy!</p>`;
+        }
+      }).catch(err=>console.error(err));
+    }
+  </script>
+
+  <footer>
+    <div class="container">© FuZArts — z pasją i detalem <span style="color:var(--red)">●</span></div>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>
